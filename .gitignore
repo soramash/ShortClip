@@ -1,0 +1,29 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Build output
+dist/
+DerivedData/
+
+# Xcode user state
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserstate
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Local Codex/agent configuration
+.codex/
+docs/plans/
