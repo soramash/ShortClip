@@ -43,14 +43,16 @@ final class QuickPastePanelController {
       mode: .quickPaste,
       quickPastePanelState: panelState,
       onHistorySelected: { [weak self] id in
-        self?.performQuickPaste {
-          self?.appState.quickPasteHistoryItem(id: id) ?? false
-        }
+        self?.performQuickPaste(
+          prepare: { self?.appState.prepareQuickPasteHistoryItem(id: id) ?? false },
+          paste: { self?.appState.quickPasteHistoryItem(id: id) ?? false }
+        )
       },
       onSnippetSelected: { [weak self] id in
-        self?.performQuickPaste {
-          self?.appState.quickPasteSnippet(id: id) ?? false
-        }
+        self?.performQuickPaste(
+          prepare: { self?.appState.prepareQuickPasteSnippet(id: id) ?? false },
+          paste: { self?.appState.quickPasteSnippet(id: id) ?? false }
+        )
       },
       onCloseRequested: { [weak self] in
         self?.hide()
@@ -108,18 +110,30 @@ final class QuickPastePanelController {
   ]
 
   private func performQuickPaste(
-    action: @escaping () -> Bool
+    prepare: @escaping () -> Bool,
+    paste: @escaping () -> Bool
   ) {
     let targetApp = previousApp
-    hide()
-    targetApp?.activate(options: [])
-
     let isRemoteDesktop = targetApp?.bundleIdentifier
       .map { Self.remoteDesktopBundleIDs.contains($0) } ?? false
-    let delay: TimeInterval = isRemoteDesktop ? 0.5 : 0.12
 
-    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-      _ = action()
+    if isRemoteDesktop {
+      // Screen Sharing: write to clipboard first, then activate remote app and wait for sync
+      guard prepare() else {
+        hide()
+        return
+      }
+      hide()
+      targetApp?.activate(options: [])
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+        self?.appState.performPasteAction()
+      }
+    } else {
+      hide()
+      targetApp?.activate(options: [])
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+        _ = paste()
+      }
     }
   }
 }
