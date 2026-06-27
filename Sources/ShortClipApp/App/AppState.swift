@@ -222,6 +222,21 @@ final class AppState: ObservableObject {
 
   @discardableResult
   func quickPasteHistoryItem(id: UUID) -> Bool {
+    guard prepareQuickPasteHistoryItem(id: id) else {
+      return false
+    }
+    return performPaste()
+  }
+
+  @discardableResult
+  func quickPasteSnippet(id: UUID) -> Bool {
+    guard prepareQuickPasteSnippet(id: id) else {
+      return false
+    }
+    return performPaste()
+  }
+
+  func prepareQuickPasteHistoryItem(id: UUID) -> Bool {
     guard isShortClipEnabled else {
       diagnosticLogger.log("quick_paste_history_blocked disabled=true")
       return false
@@ -233,11 +248,10 @@ final class AppState: ObservableObject {
 
     pasteboardWatcher.write(text: entry.text)
     syncHistory()
-    return performPaste()
+    return true
   }
 
-  @discardableResult
-  func quickPasteSnippet(id: UUID) -> Bool {
+  func prepareQuickPasteSnippet(id: UUID) -> Bool {
     guard isShortClipEnabled else {
       diagnosticLogger.log("quick_paste_snippet_blocked disabled=true")
       return false
@@ -258,7 +272,12 @@ final class AppState: ObservableObject {
     persistSnippets()
     syncHistory()
     diagnosticLogger.log("quick_paste_snippet_succeeded id=\(id.uuidString)")
-    return performPaste()
+    return true
+  }
+
+  @discardableResult
+  func performPasteAction() -> Bool {
+    performPaste()
   }
 
   func requestAutoPastePermission() {
