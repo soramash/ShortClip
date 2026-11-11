@@ -266,9 +266,9 @@ struct AppLocalizer {
     case (.english, .snippetLockedMessage):
       "Snippets are locked"
     case (.japanese, .snippetLockedDetail):
-      "保存ファイルは残っていますが、暗号鍵にアクセスできません。鍵が使える状態に戻るまで、定型文の編集は無効です。"
+      "保存ファイルは残っていますが、暗号鍵にアクセスできません。キーチェーンの鍵へのアクセスを確認してください。"
     case (.english, .snippetLockedDetail):
-      "The snippet file still exists, but ShortClip can't access the encryption key. Snippet editing stays disabled until key access is restored."
+      "The snippet file still exists, but ShortClip can't access its encryption key. Check access to the key in your login Keychain."
     case (.japanese, .unlockSnippetsAction):
       "定型文のロックを解除"
     case (.english, .unlockSnippetsAction):

@@ -69,6 +69,20 @@ struct SnippetCryptoServiceTests {
     }
     #expect(failingProvider.decryptionCallCount == 1)
   }
+
+  @Test
+  func wrongKeyCannotDecryptSnippet() throws {
+    let originalKey = SymmetricKey(size: .bits256)
+    let encryptedData = try SnippetCryptoService(
+      keyProvider: RecordingKeyProvider(encryptionKey: originalKey, decryptionKey: originalKey)
+    ).encrypt(Data("secret".utf8))
+    let wrongKey = SymmetricKey(size: .bits256)
+    let provider = RecordingKeyProvider(encryptionKey: wrongKey, decryptionKey: wrongKey)
+
+    #expect(throws: Error.self) {
+      _ = try SnippetCryptoService(keyProvider: provider).decrypt(encryptedData)
+    }
+  }
 }
 
 private final class RecordingKeyProvider: SnippetKeyProviding, @unchecked Sendable {
