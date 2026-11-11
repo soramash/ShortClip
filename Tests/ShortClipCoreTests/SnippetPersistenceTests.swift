@@ -130,7 +130,7 @@ struct SnippetPersistenceTests {
   }
 
   @Test
-  func loadingPlaintextFileWithCodecMigratesItToEncodedStorage() throws {
+  func plaintextReplacementCannotOverrideEncryptedBackup() throws {
     let directoryURL = FileManager.default.temporaryDirectory
       .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let fileURL = directoryURL.appendingPathComponent("snippets.json")
@@ -140,28 +140,39 @@ struct SnippetPersistenceTests {
         Data("wrapped:".utf8) + plaintext
       },
       fileDecoder: { storedData in
-        Data(storedData.dropFirst("wrapped:".count))
+        guard storedData.starts(with: Data("wrapped:".utf8)) else {
+          throw CocoaError(.fileReadCorruptFile)
+        }
+        return Data(storedData.dropFirst("wrapped:".count))
       }
     )
-    let snippets = [
+    let originalSnippets = [
       SnippetEntry(
         id: UUID(uuidString: "77777777-7777-7777-7777-777777777777")!,
-        title: "Legacy",
-        text: "plaintext",
+        title: "Original",
+        text: "protected",
         updatedAt: Date(timeIntervalSince1970: 700)
+      )
+    ]
+    let replacementSnippets = [
+      SnippetEntry(
+        id: UUID(uuidString: "88888888-8888-8888-8888-888888888888")!,
+        title: "Replacement",
+        text: "untrusted",
+        updatedAt: Date(timeIntervalSince1970: 800)
       )
     ]
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     encoder.dateEncodingStrategy = .iso8601
 
-    try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-    try encoder.encode(snippets).write(to: fileURL, options: .atomic)
+    try persistence.save(snippets: originalSnippets)
+    try encoder.encode(replacementSnippets).write(to: fileURL, options: .atomic)
 
     let loadedSnippets = try persistence.load()
     let storedData = try Data(contentsOf: fileURL)
 
-    #expect(loadedSnippets == snippets)
+    #expect(loadedSnippets == originalSnippets)
     #expect(String(decoding: storedData, as: UTF8.self).hasPrefix("wrapped:"))
   }
 

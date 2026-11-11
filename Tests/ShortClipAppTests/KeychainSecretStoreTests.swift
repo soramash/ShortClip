@@ -1,131 +1,90 @@
 import Foundation
-import LocalAuthentication
 import Security
 import Testing
 @testable import ShortClipApp
 
 struct KeychainSecretStoreTests {
   @Test
-  func readSecretUsesAuthenticationContextAndDataProtectionKeychain() throws {
-    let session = KeychainAuthenticationSession(
-      localizedReason: "Unlock snippet key"
-    )
-    let request = SecretAccessRequest(
-      localizedReason: "Unlock snippet key",
-      authenticationSession: session
-    )
+  func readsLocalKeyWithoutDataProtectionAuthentication() throws {
+    let data = Data("secret".utf8)
     let client = RecordingSecurityItemClient(
-      copyResult: SecurityItemCopyResult(
-        status: errSecSuccess,
-        value: Data("secret".utf8)
-      )
+      copyResult: SecurityItemCopyResult(status: errSecSuccess, value: data)
     )
     let store = KeychainSecretStore(securityClient: client)
 
-    let secret = try store.readSecret(
-      service: "dev.shortclip.snippet-encryption",
-      account: "snippet-encryption-key-v2",
-      request: request
+    let loaded = try store.readSecret(
+      service: SnippetKeyAccounts.primaryService,
+      account: SnippetKeyAccounts.localAccount
     )
 
-    #expect(secret == Data("secret".utf8))
+    #expect(loaded == data)
     let query = try #require(client.lastCopyQuery)
-    #expect((query[kSecUseDataProtectionKeychain] as? Bool) == true)
-    let authenticationContext = try #require(query[kSecUseAuthenticationContext] as? LAContext)
-    #expect(authenticationContext.localizedReason == "Unlock snippet key")
-    #expect(authenticationContext.touchIDAuthenticationAllowableReuseDuration == KeychainAuthenticationSession.defaultReuseDuration)
+    #expect(query[kSecAttrService] as? String == SnippetKeyAccounts.primaryService)
+    #expect(query[kSecAttrAccount] as? String == SnippetKeyAccounts.localAccount)
+    #expect(query[kSecUseDataProtectionKeychain] == nil)
+    #expect(query[kSecUseAuthenticationContext] == nil)
   }
 
   @Test
-  func saveSecretCreateOnlyUsesUserPresenceAccessControl() throws {
-    let session = KeychainAuthenticationSession(
-      localizedReason: "Unlock snippet key"
-    )
-    let request = SecretAccessRequest(
-      localizedReason: "Unlock snippet key",
-      authenticationSession: session
-    )
+  func missingKeyReturnsNil() throws {
     let client = RecordingSecurityItemClient()
-    var recordedProtection: CFTypeRef?
-    var recordedFlags: SecAccessControlCreateFlags?
-    let store = KeychainSecretStore(
-      securityClient: client,
-      accessControlFactory: { protection, flags in
-        recordedProtection = protection
-        recordedFlags = flags
-        var error: Unmanaged<CFError>?
-        return try #require(
-          SecAccessControlCreateWithFlags(nil, protection, flags, &error)
-        )
-      }
+    let store = KeychainSecretStore(securityClient: client)
+
+    let loaded = try store.readSecret(
+      service: SnippetKeyAccounts.primaryService,
+      account: SnippetKeyAccounts.localAccount
     )
 
-    try store.saveSecret(
-      Data("secret".utf8),
-      service: "dev.shortclip.snippet-encryption",
-      account: "snippet-encryption-key-v2",
-      request: request,
-      mode: .createOnly
+    #expect(loaded == nil)
+  }
+
+  @Test
+  func createsLocalKeyWithoutUserPresenceRequirement() throws {
+    let client = RecordingSecurityItemClient()
+    let store = KeychainSecretStore(securityClient: client)
+    let data = Data("secret".utf8)
+
+    try store.createSecret(
+      data,
+      service: SnippetKeyAccounts.primaryService,
+      account: SnippetKeyAccounts.localAccount
     )
 
     let attributes = try #require(client.lastAddAttributes)
-    #expect(attributes[kSecAttrAccessible] == nil)
-    #expect(attributes[kSecAttrAccessControl] != nil)
-    #expect(recordedProtection as? String == kSecAttrAccessibleWhenUnlockedThisDeviceOnly as String)
-    #expect(recordedFlags == .userPresence)
-    let authenticationContext = try #require(attributes[kSecUseAuthenticationContext] as? LAContext)
-    #expect(authenticationContext.localizedReason == "Unlock snippet key")
+    #expect(attributes[kSecValueData] as? Data == data)
+    #expect(attributes[kSecUseDataProtectionKeychain] == nil)
+    #expect(attributes[kSecAttrAccessControl] == nil)
   }
 
   @Test
-  func saveSecretUpdateOrCreateFallsBackToAddWhenUpdateMisses() throws {
-    let session = KeychainAuthenticationSession(
-      localizedReason: "Unlock snippet key"
-    )
-    let request = SecretAccessRequest(
-      localizedReason: "Unlock snippet key",
-      authenticationSession: session
-    )
-    let client = RecordingSecurityItemClient(
-      updateStatus: errSecItemNotFound,
-      addStatus: errSecSuccess
-    )
+  func duplicateKeyIsNotSilentlyReplaced() {
+    let client = RecordingSecurityItemClient(addStatus: errSecDuplicateItem)
     let store = KeychainSecretStore(securityClient: client)
 
-    try store.saveSecret(
-      Data("secret".utf8),
-      service: "dev.shortclip.snippet-encryption",
-      account: "snippet-encryption-key-v2",
-      request: request,
-      mode: .updateOrCreate
-    )
-
-    #expect(client.updateCallCount == 1)
-    #expect(client.addCallCount == 1)
+    #expect(throws: KeychainSecretStoreError.self) {
+      try store.createSecret(
+        Data("new-key".utf8),
+        service: SnippetKeyAccounts.primaryService,
+        account: SnippetKeyAccounts.localAccount
+      )
+    }
   }
 }
 
 private final class RecordingSecurityItemClient: SecurityItemControlling, @unchecked Sendable {
   private let copyResult: SecurityItemCopyResult
-  private let updateStatus: OSStatus
   private let addStatus: OSStatus
   private(set) var lastCopyQuery: [CFString: Any]?
-  private(set) var lastUpdateQuery: [CFString: Any]?
-  private(set) var lastUpdateAttributes: [CFString: Any]?
   private(set) var lastAddAttributes: [CFString: Any]?
-  private(set) var updateCallCount = 0
-  private(set) var addCallCount = 0
 
   init(
     copyResult: SecurityItemCopyResult = SecurityItemCopyResult(
       status: errSecItemNotFound,
       value: nil
     ),
-    updateStatus: OSStatus = errSecSuccess,
     addStatus: OSStatus = errSecSuccess
   ) {
     self.copyResult = copyResult
-    self.updateStatus = updateStatus
     self.addStatus = addStatus
   }
 
@@ -134,19 +93,8 @@ private final class RecordingSecurityItemClient: SecurityItemControlling, @unche
     return copyResult
   }
 
-  func update(
-    _ query: [CFString: Any],
-    attributes: [CFString: Any]
-  ) -> OSStatus {
-    lastUpdateQuery = query
-    lastUpdateAttributes = attributes
-    updateCallCount += 1
-    return updateStatus
-  }
-
   func add(_ attributes: [CFString: Any]) -> OSStatus {
     lastAddAttributes = attributes
-    addCallCount += 1
     return addStatus
   }
 }

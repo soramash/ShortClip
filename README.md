@@ -9,9 +9,9 @@ ShortClip is a lightweight macOS menu bar clipboard helper for text snippets and
 - Lets you pause clipboard capture and recall actions from the menu bar or Settings.
 - Lets you add, edit, delete, and recall reusable text snippets.
 - Persists snippets in Application Support and encrypts them at rest with AES-GCM.
-- Stores the snippet encryption key in the macOS Keychain with a user-presence access policy.
+- Stores the snippet encryption key in the local macOS login Keychain.
 - Keeps encrypted snippet files intact when Keychain access fails, and disables snippet edits until unlock succeeds.
-- Migrates older plaintext snippet files into encrypted storage when they are found.
+- Rejects plaintext snippet files when encrypted storage is enabled; if the main file is invalid, ShortClip tries its encrypted backup.
 - Opens a quick-paste panel with `Cmd + Shift + V` by default.
 - Lets you customize the quick-paste shortcut in Settings.
 - Supports keyboard navigation in the quick-paste panel, including arrow keys, row numbers, details, Return, and Escape.
@@ -34,6 +34,8 @@ swift run ShortClipApp
 ```
 
 The app appears in the macOS menu bar. Open the menu bar window to preview recent snippets and clipboard history, open the library window, change settings, and manage snippets.
+
+ShortClip loads snippets when it starts. macOS may ask you to approve access to its login Keychain item.
 
 Press `Cmd + Shift + V` anywhere to open the quick-paste panel. Selecting an item always copies it to the clipboard. If Accessibility permission is granted and automatic paste is enabled, ShortClip restores focus to the previous app and sends `Cmd + V`.
 
@@ -59,7 +61,7 @@ zsh ./Scripts/build-app.sh
 
 This creates `dist/ShortClip.app`.
 
-The local build script ad hoc signs the bundle. Use Developer ID signing, Hardened Runtime, and notarization before distributing a downloadable release outside your own machine.
+The script uses local ad hoc signing. It needs no Apple Development certificate or provisioning profile, so there is no weekly renewal. The app reads its existing local login Keychain item on each launch.
 
 ## Privacy And Security
 
@@ -71,8 +73,8 @@ The local build script ad hoc signs the bundle. Use Developer ID signing, Harden
 - Snippets are stored at `~/Library/Application Support/ShortClip/snippets.json`.
 - The snippet backup file is stored next to it as `snippets.backup.json`.
 - Snippet files are encrypted before being written to disk.
-- The encryption key is stored in Keychain service `dev.shortclip.snippet-encryption`, account `snippet-encryption-key-v2`.
-- New Keychain items use `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` and `.userPresence`.
+- The encryption key is stored in the local login Keychain under service `dev.shortclip.snippet-encryption`, account `snippet-encryption-key-local`.
+- The Keychain item does not require user presence on each read; macOS controls app access through its Keychain access list. ShortClip does not import older protected keys or plaintext snippet files automatically.
 - The resolved encryption key is cached in process memory for the current app session to reduce repeated Keychain prompts.
 - Diagnostic logs are written to `~/Library/Application Support/ShortClip/Logs/shortclip.log`.
 - Diagnostic logs record counts, paths, status values, and error summaries, but not snippet text or clipboard history text.

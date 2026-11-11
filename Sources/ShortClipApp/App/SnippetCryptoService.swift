@@ -7,7 +7,7 @@ struct SnippetCryptoService {
   private let logger: @Sendable (String) -> Void
 
   init(
-    keyProvider: any SnippetKeyProviding = SnippetKeyProvider(),
+    keyProvider: any SnippetKeyProviding = LocalSnippetKeyProvider(),
     logger: @escaping @Sendable (String) -> Void = { _ in }
   ) {
     self.keyProvider = keyProvider

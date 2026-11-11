@@ -113,28 +113,19 @@ public struct SnippetPersistence {
     let storedData = try Data(contentsOf: fileURL)
     logger?("snippet_persistence_read path=\(fileURL.fileSystemPath) bytes=\(storedData.count)")
 
-    if let snippets = try? decodeSnippetPayload(from: storedData) {
-      if fileEncoder != nil {
-        logger?("snippet_persistence_plaintext_detected path=\(fileURL.fileSystemPath)")
-        try save(snippets: snippets)
-      }
-      return snippets
+    guard let fileDecoder else {
+      return try decodeSnippetPayload(from: storedData)
     }
 
-    if let fileDecoder {
-      let decodedData: Data
-
-      do {
-        decodedData = try fileDecoder(storedData)
-      } catch is SnippetPersistenceLockingError {
-        logger?("snippet_persistence_decoder_locked path=\(fileURL.fileSystemPath)")
-        throw SnippetPersistenceLoadError.locked
-      }
-
-      return try decodeSnippetPayload(from: decodedData)
+    let decodedData: Data
+    do {
+      decodedData = try fileDecoder(storedData)
+    } catch is SnippetPersistenceLockingError {
+      logger?("snippet_persistence_decoder_locked path=\(fileURL.fileSystemPath)")
+      throw SnippetPersistenceLoadError.locked
     }
 
-    throw CocoaError(.fileReadCorruptFile)
+    return try decodeSnippetPayload(from: decodedData)
   }
 
   private func decodeSnippetPayload(from data: Data) throws -> [SnippetEntry] {
